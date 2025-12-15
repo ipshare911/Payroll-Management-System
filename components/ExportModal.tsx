@@ -148,7 +148,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
   const ModeCard = ({ id, label, icon, desc }: { id: ExportMode, label: string, icon: any, desc: string }) => (
     <div 
       onClick={() => setMode(id)}
-      className={`cursor-pointer border rounded-xl p-4 transition-all duration-200 flex flex-col gap-2 ${
+      className={`cursor-pointer border rounded-xl p-3 md:p-4 transition-all duration-200 flex flex-col gap-2 ${
         mode === id 
           ? 'border-[#007AFF] bg-blue-50/50 ring-1 ring-[#007AFF]' 
           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -161,8 +161,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
         {mode === id && <Check className="w-5 h-5 text-[#007AFF]" />}
       </div>
       <div>
-        <div className={`font-semibold ${mode === id ? 'text-[#007AFF]' : 'text-gray-700'}`}>{label}</div>
-        <div className="text-xs text-gray-400 mt-1">{desc}</div>
+        <div className={`font-semibold text-sm ${mode === id ? 'text-[#007AFF]' : 'text-gray-700'}`}>{label}</div>
+        <div className="text-[10px] md:text-xs text-gray-400 mt-1">{desc}</div>
       </div>
     </div>
   );
@@ -172,13 +172,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-100">
+        <div className="flex justify-between items-center p-4 md:p-6 border-b border-gray-100">
           <div>
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <h2 className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
               <Download className="w-5 h-5 text-[#007AFF]" />
               导出工资数据
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs md:text-sm text-gray-500 mt-1">
               当前范围: {context.year}年 · {context.department === 'all' ? '全院' : context.department} · 共 {data.length} 条记录
             </p>
           </div>
@@ -188,7 +188,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8">
           
           {/* Section 1: Mode Selection */}
           <section>
@@ -196,7 +196,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
               <span className="w-1 h-4 bg-[#007AFF] rounded-full"></span>
               第一步：选择导出方式
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
               <ModeCard 
                 id="detail" 
                 label="原始明细" 
@@ -242,16 +242,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
                 </div>
              </div>
              
-             <div className="bg-[#F9F9FB] rounded-xl p-4 border border-gray-100">
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+             <div className="bg-[#F9F9FB] rounded-xl p-3 md:p-4 border border-gray-100">
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                  {COLUMN_CONFIG.map((col) => (
                    <label 
                       key={col.key} 
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-xs md:text-sm
                         ${selectedColumns.includes(col.key) ? 'bg-white shadow-sm border border-gray-200' : 'hover:bg-gray-100'}
                       `}
                    >
-                     <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                     <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
                         selectedColumns.includes(col.key) 
                           ? 'bg-[#007AFF] border-[#007AFF]' 
                           : 'border-gray-300 bg-white'
@@ -264,7 +264,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
                        checked={selectedColumns.includes(col.key)}
                        onChange={() => toggleColumn(col.key)}
                      />
-                     <span className={selectedColumns.includes(col.key) ? 'text-gray-900 font-medium' : 'text-gray-500'}>
+                     <span className={`truncate ${selectedColumns.includes(col.key) ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
                        {col.label}
                      </span>
                    </label>
@@ -276,19 +276,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, data,
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3 rounded-b-2xl">
+        <div className="p-4 md:p-6 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3 rounded-b-2xl">
           <button 
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-200/50 hover:text-gray-900 transition-colors"
+            className="px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-200/50 hover:text-gray-900 transition-colors"
           >
             取消
           </button>
           <button 
             onClick={handleExport}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium bg-[#007AFF] text-white hover:bg-[#0066CC] shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2"
+            className="px-4 py-2 md:px-5 md:py-2.5 rounded-xl text-sm font-medium bg-[#007AFF] text-white hover:bg-[#0066CC] shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2"
           >
             <Download size={16} />
-            确认导出 Excel
+            确认导出
           </button>
         </div>
 

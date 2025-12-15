@@ -214,10 +214,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 animate-in fade-in zoom-in duration-200">
-        <div className="flex justify-between items-center mb-6 border-b pb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-4 md:p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex justify-between items-center mb-4 md:mb-6 border-b pb-4">
+          <h2 className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
             <Upload className="w-5 h-5 text-primary-600" />
             导入工资数据 (Excel)
           </h2>
@@ -227,7 +227,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
         </div>
 
         <div className="space-y-4">
-          <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-xs flex items-start gap-3">
+          <div className="p-3 md:p-4 bg-blue-50 text-blue-800 rounded-lg text-xs flex items-start gap-3">
              <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" />
              <div>
                <p className="font-semibold mb-1">Excel 格式说明:</p>
@@ -240,11 +240,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
           </div>
 
           <div className="flex flex-col items-center justify-center w-full">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+            <label className="flex flex-col items-center justify-center w-full h-24 md:h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload className="w-8 h-8 mb-3 text-gray-400" />
-                <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">点击上传</span> 或拖拽 Excel 文件</p>
-                <p className="text-xs text-gray-500">支持 .xlsx / .xls</p>
+                <Upload className="w-6 h-6 md:w-8 md:h-8 mb-2 md:mb-3 text-gray-400" />
+                <p className="mb-1 md:mb-2 text-xs md:text-sm text-gray-500"><span className="font-semibold">点击上传</span> 或拖拽 Excel 文件</p>
+                <p className="text-[10px] md:text-xs text-gray-500">支持 .xlsx / .xls</p>
               </div>
               <input 
                   ref={fileInputRef}
@@ -264,14 +264,14 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-md">
+            <div className="flex items-center gap-2 text-red-600 text-xs md:text-sm bg-red-50 p-3 rounded-md">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
           
           {successMsg && (
-            <div className="flex items-center gap-2 text-green-600 text-sm bg-green-50 p-3 rounded-md">
+            <div className="flex items-center gap-2 text-green-600 text-xs md:text-sm bg-green-50 p-3 rounded-md">
               <CheckCircle className="w-4 h-4 flex-shrink-0" />
               <span>{successMsg}</span>
             </div>
