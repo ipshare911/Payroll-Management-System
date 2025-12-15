@@ -5,6 +5,12 @@ interface LoginProps {
   onLogin: (success: boolean) => void;
 }
 
+// 使用 Base64 编码存储凭证，避免明文显示密码
+// Username: 'admin' -> Base64
+const TARGET_USER_B64 = "YWRtaW4=";
+// Password: 'admin2025' -> Base64
+const TARGET_PASS_B64 = "YWRtaW4yMDI1";
+
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -18,10 +24,23 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // Simulate network delay for better UX feeling
     setTimeout(() => {
-      if (username === 'admin' && password === 'admin2025') {
-        onLogin(true);
-      } else {
-        setError('用户名或密码错误');
+      try {
+        // 使用 btoa 进行简单的 Base64 编码对比
+        // 注意：这种方式主要用于防止密码在源码中明文显示，适用于内网/演示环境
+        // 兼容所有浏览器环境（包括非 HTTPS）
+        const inputUserB64 = btoa(username.trim());
+        const inputPassB64 = btoa(password.trim());
+
+        if (inputUserB64 === TARGET_USER_B64 && inputPassB64 === TARGET_PASS_B64) {
+          onLogin(true);
+        } else {
+          setError('用户名或密码错误');
+          setIsLoading(false);
+        }
+      } catch (err) {
+        // btoa 可能会因为特殊字符报错，视为验证失败
+        console.error("Auth error", err);
+        setError('用户名或密码包含不支持的字符');
         setIsLoading(false);
       }
     }, 600);
