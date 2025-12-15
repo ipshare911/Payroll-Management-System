@@ -1,0 +1,863 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Upload as UploadIcon, 
+  Download,
+  Search,
+  Building2,
+  ChevronRight,
+  ChevronLeft,
+  Wallet,
+  PieChart as PieChartIcon,
+  Users,
+  Calculator,
+  ChevronDown,
+  Pencil,
+  Save,
+  X as XIcon,
+  Trash2,
+  Rows,
+  Sigma,
+  UserCircle
+} from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { SalaryRecord } from './types';
+import { db } from './services/db';
+import { ImportModal } from './components/ImportModal';
+import { ExportModal } from './components/ExportModal';
+
+// --- Apple Style Constants ---
+const DEPARTMENTS = ['基础地质所', '规划所', '储量所', '绿色矿山所', '矿业经济所', '遥感所', '办公室'];
+
+const STAT_COLUMNS: { key: keyof SalaryRecord; label: string }[] = [
+    { key: 'positionSalary', label: '岗位工资' },
+    { key: 'baseSalary', label: '基本工资' },
+    { key: 'retentionAllowance', label: '保留津贴' },
+    { key: 'performanceSalary', label: '绩效工资' },
+    { key: 'internalAuditFee', label: '内审费' },
+    { key: 'certificateSubsidy', label: '证书补贴' },
+    { key: 'annualLeavePay', label: '未休年假' },
+    { key: 'publicityPerformance', label: '宣传绩效' },
+    { key: 'branchAuditFee', label: '分院内审' },
+    { key: 'researchPerformance', label: '科研绩效' },
+    { key: 'otherPerformanceAccounting', label: '走账绩效' },
+    { key: 'other', label: '其他' },
+];
+
+const formatCurrency = (val: number) => {
+  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 }).format(val);
+};
+
+function App() {
+  // Navigation State
+  const [activeDepartment, setActiveDepartment] = useState<string>('all'); // 'all' = 分院概况
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  
+  // Filter State
+  const [selectedYear, setSelectedYear] = useState<string>('2025');
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // View State
+  const [viewMode, setViewMode] = useState<'monthly' | 'summary'>('monthly');
+
+  // Custom Stat State
+  const [customStatKey, setCustomStatKey] = useState<keyof SalaryRecord>('performanceSalary');
+
+  // Data State
+  const [records, setRecords] = useState<SalaryRecord[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // Edit State
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<SalaryRecord | null>(null);
+
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const refreshData = () => {
+    setRecords(db.getAllRecords());
+  };
+
+  // --- Computed Data ---
+
+  const availableYears = useMemo(() => {
+    const years = new Set(records.map(r => r.month.split('-')[0]));
+    if (!years.has('2025')) years.add('2025');
+    return Array.from(years).sort().reverse();
+  }, [records]);
+
+  // Main Filter Logic
+  const filteredRecords = useMemo(() => {
+    let filtered = records;
+
+    // 1. Department Filter
+    if (activeDepartment !== 'all') {
+      filtered = filtered.filter(r => r.department === activeDepartment);
+    }
+
+    // 2. Year Filter
+    filtered = filtered.filter(r => r.month.startsWith(selectedYear));
+
+    // 3. Month Filter (if specific month selected)
+    if (selectedMonth !== 'all') {
+      const monthStr = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
+      filtered = filtered.filter(r => r.month === monthStr);
+    }
+
+    // 4. Search Filter
+    if (searchTerm) {
+      filtered = filtered.filter(r => 
+        r.employeeName.includes(searchTerm) || 
+        r.department.includes(searchTerm) 
+      );
+    }
+    return filtered;
+  }, [records, activeDepartment, selectedYear, selectedMonth, searchTerm]);
+
+  // Employee Directory Data (Right Sidebar)
+  const employeeDirectory = useMemo(() => {
+      // Base records on current department selection (Year independent to show full roster, or dependent? Usually roster is better year dependent if people leave, but let's just use filtered by Year for consistency)
+      // Actually, for a "Directory", showing everyone who has a record in the selected year is best.
+      let baseData = records.filter(r => r.month.startsWith(selectedYear));
+      
+      if (activeDepartment !== 'all') {
+          baseData = baseData.filter(r => r.department === activeDepartment);
+      }
+
+      const map = new Map<string, { name: string; dept: string; total: number; count: number }>();
+      
+      baseData.forEach(r => {
+          const key = `${r.employeeName}-${r.department}`;
+          if (!map.has(key)) {
+              map.set(key, { name: r.employeeName, dept: r.department, total: 0, count: 0 });
+          }
+          const entry = map.get(key)!;
+          entry.total += r.netTotal;
+          entry.count += 1;
+      });
+
+      let list = Array.from(map.values());
+      
+      // Filter by search term
+      if (searchTerm) {
+          list = list.filter(e => e.name.includes(searchTerm) || e.dept.includes(searchTerm));
+      }
+      
+      // Sort by Total Income Descending
+      return list.sort((a, b) => b.total - a.total);
+  }, [records, activeDepartment, selectedYear, searchTerm]);
+
+  // Aggregation Logic for Summary View
+  const summaryRecords = useMemo(() => {
+      if (viewMode === 'monthly') return [];
+
+      const map = new Map<string, SalaryRecord & { count: number }>();
+
+      filteredRecords.forEach(r => {
+          const key = `${r.employeeName}-${r.department}`;
+          if (!map.has(key)) {
+              map.set(key, {
+                  ...r,
+                  id: key, // Virtual ID
+                  month: '', // Will be used for count
+                  count: 0,
+                  positionSalary: 0,
+                  baseSalary: 0,
+                  retentionAllowance: 0,
+                  performanceSalary: 0,
+                  internalAuditFee: 0,
+                  certificateSubsidy: 0,
+                  annualLeavePay: 0,
+                  publicityPerformance: 0,
+                  branchAuditFee: 0,
+                  researchPerformance: 0,
+                  otherPerformanceAccounting: 0,
+                  other: 0,
+                  total: 0,
+                  netTotal: 0
+              });
+          }
+          const entry = map.get(key)!;
+          entry.count += 1;
+          
+          // Accumulate numeric fields
+          STAT_COLUMNS.forEach(col => {
+              (entry[col.key] as number) += (r[col.key] as number);
+          });
+          entry.total += r.total;
+          entry.netTotal += r.netTotal;
+      });
+
+      return Array.from(map.values());
+  }, [filteredRecords, viewMode]);
+
+  const displayRecords = viewMode === 'monthly' ? filteredRecords : summaryRecords;
+
+  // Data for Trend Bar Chart
+  const trendRecords = useMemo(() => {
+     let data = records.filter(r => r.month.startsWith(selectedYear));
+     if (activeDepartment !== 'all') {
+         data = data.filter(r => r.department === activeDepartment);
+     }
+     return data;
+  }, [records, selectedYear, activeDepartment]);
+
+  const trendData = Object.values(trendRecords.reduce((acc, curr) => {
+    if (!acc[curr.month]) {
+      acc[curr.month] = { name: parseInt(curr.month.split('-')[1]) + '月', total: 0 };
+    }
+    acc[curr.month].total += curr.netTotal; // Use Net Total
+    return acc;
+  }, {} as Record<string, { name: string; total: number }>)).sort((a: { name: string; total: number }, b: { name: string; total: number }) => {
+      const mA = parseInt(a.name.replace('月',''));
+      const mB = parseInt(b.name.replace('月',''));
+      return mA - mB;
+  });
+
+  // Stats
+  const totalPayout = filteredRecords.reduce((acc, r) => acc + r.netTotal, 0); // 实发合计
+  const grossTotalPayout = filteredRecords.reduce((acc, r) => acc + r.total, 0); // 合计
+  const headcount = new Set(filteredRecords.map(r => r.employeeName)).size;
+  
+  // Custom Stat Calculation
+  const customStatValue = filteredRecords.reduce((acc, r) => {
+      const val = r[customStatKey];
+      return acc + (typeof val === 'number' ? val : 0);
+  }, 0);
+
+  // --- Handlers ---
+
+  const handleEditClick = (record: SalaryRecord) => {
+    setEditingId(record.id);
+    setEditForm({ ...record });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditForm(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editForm) return;
+
+    // Recalculate Totals Logic
+    const total = (Number(editForm.positionSalary) || 0) + 
+                  (Number(editForm.baseSalary) || 0) + 
+                  (Number(editForm.retentionAllowance) || 0) + 
+                  (Number(editForm.performanceSalary) || 0) + 
+                  (Number(editForm.internalAuditFee) || 0) + 
+                  (Number(editForm.certificateSubsidy) || 0) + 
+                  (Number(editForm.annualLeavePay) || 0) + 
+                  (Number(editForm.publicityPerformance) || 0) + 
+                  (Number(editForm.branchAuditFee) || 0) + 
+                  (Number(editForm.researchPerformance) || 0) + 
+                  (Number(editForm.otherPerformanceAccounting) || 0) + 
+                  (Number(editForm.other) || 0);
+    
+    const netTotal = total - (Number(editForm.otherPerformanceAccounting) || 0);
+
+    const updatedRecord = {
+        ...editForm,
+        total,
+        netTotal
+    };
+
+    db.updateRecord(updatedRecord);
+    refreshData();
+    setEditingId(null);
+    setEditForm(null);
+  };
+
+  const handleDelete = (id: string) => {
+      if(window.confirm('确定要删除这条记录吗？')) {
+          db.deleteRecord(id);
+          refreshData();
+      }
+  };
+
+  const handleInputChange = (field: keyof SalaryRecord, value: string) => {
+      if (!editForm) return;
+      
+      let parsedValue: string | number = value;
+      if (!['employeeName', 'department', 'month', 'id', 'sequence'].includes(field)) {
+          parsedValue = parseFloat(value);
+          if (isNaN(parsedValue)) parsedValue = 0;
+      }
+
+      setEditForm({
+          ...editForm,
+          [field]: parsedValue
+      });
+  };
+
+  // Helper to render cell content (text or input)
+  const renderCell = (record: SalaryRecord, field: keyof SalaryRecord, isNumeric: boolean = true) => {
+      if (viewMode === 'monthly' && editingId === record.id && editForm) {
+          return (
+              <input 
+                  type={isNumeric ? "number" : "text"}
+                  className={`w-full bg-white border border-[#007AFF] rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#007AFF] ${isNumeric ? 'text-right' : 'text-left'}`}
+                  value={editForm[field] || ''}
+                  onChange={(e) => handleInputChange(field, e.target.value)}
+              />
+          );
+      }
+      return isNumeric ? (record[field] as number) : (record[field] as string);
+  };
+
+  return (
+    <div className="flex h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans overflow-hidden selection:bg-[#007AFF] selection:text-white">
+      <ImportModal 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+        onSuccess={refreshData}
+      />
+
+      <ExportModal 
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        data={filteredRecords}
+        context={{
+            year: selectedYear,
+            department: activeDepartment
+        }}
+      />
+
+      {/* Apple Style Sidebar (Left) */}
+      {/* Fix: Removed negative margin (-ml-4) which caused layout issues. Added overflow-hidden to cleanly hide content. */}
+      <aside className={`bg-[#FBFBFD] border-r border-[#E5E5EA] transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-0'} overflow-hidden flex flex-col z-20 flex-shrink-0`}>
+        <div className="h-16 flex items-center px-6 pt-4 mb-2 flex-shrink-0">
+           <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-[#007AFF] to-[#5856D6] rounded-lg shadow-md flex items-center justify-center text-white">
+                <Wallet size={18} strokeWidth={2.5} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="font-semibold text-sm leading-tight whitespace-nowrap">矿产资源分院</h1>
+                <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">工资管理系统</span>
+              </div>
+           </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
+             <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                导航
+             </div>
+             
+             <SidebarItem 
+                icon={<PieChartIcon size={18} />} 
+                label="分院概况" 
+                active={activeDepartment === 'all'} 
+                onClick={() => setActiveDepartment('all')}
+             />
+
+            <div className="mt-4 mb-1 px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                研究所
+             </div>
+             {DEPARTMENTS.map((dept) => (
+                <SidebarItem 
+                    key={dept}
+                    icon={<Building2 size={18} />} 
+                    label={dept} 
+                    active={activeDepartment === dept} 
+                    onClick={() => setActiveDepartment(dept)}
+                />
+             ))}
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+        <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-[#E5E5EA] flex items-center justify-between px-6 z-10 flex-shrink-0 sticky top-0">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-black/5 rounded-lg text-gray-500 transition-colors">
+               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 3v18"/></svg>
+            </button>
+            
+            <h2 className="text-lg font-semibold tracking-tight truncate">
+                {activeDepartment === 'all' ? '分院概况' : activeDepartment}
+            </h2>
+          </div>
+          
+          <div className="flex items-center gap-3">
+             {/* View Mode Toggle */}
+             <div className="flex bg-[#F2F2F7] rounded-lg p-1 mr-2">
+                 <button
+                    onClick={() => setViewMode('monthly')}
+                    className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        viewMode === 'monthly' ? 'bg-white text-[#007AFF] shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                 >
+                     <Rows size={12} />
+                     明细
+                 </button>
+                 <button
+                    onClick={() => setViewMode('summary')}
+                    className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        viewMode === 'summary' ? 'bg-white text-[#007AFF] shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                 >
+                     <Sigma size={12} />
+                     汇总
+                 </button>
+             </div>
+
+            <div className="relative">
+                <select 
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="appearance-none bg-[#F2F2F7] hover:bg-[#E5E5EA] text-sm font-medium pl-3 pr-8 py-1.5 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all"
+                >
+                    {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
+                </select>
+                <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 rotate-90 pointer-events-none" />
+            </div>
+
+             <div className="relative">
+                <select 
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="appearance-none bg-[#F2F2F7] hover:bg-[#E5E5EA] text-sm font-medium pl-3 pr-8 py-1.5 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all"
+                >
+                    <option value="all">全年</option>
+                    {[...Array(12)].map((_, i) => (
+                        <option key={i} value={(i+1).toString()}>{i+1}月</option>
+                    ))}
+                </select>
+                <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 rotate-90 pointer-events-none" />
+            </div>
+
+            <div className="relative group">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#007AFF] transition-colors" />
+                <input 
+                    type="text" 
+                    placeholder="搜索姓名..." 
+                    className="bg-[#F2F2F7] hover:bg-[#E5E5EA] focus:bg-white text-sm pl-9 pr-4 py-1.5 rounded-lg w-40 focus:w-60 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 border border-transparent focus:border-[#007AFF]/30 placeholder-gray-400"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                    <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded-full hover:bg-gray-200"
+                    >
+                        <XIcon size={12} />
+                    </button>
+                )}
+            </div>
+
+            <div className="h-4 w-px bg-gray-300 mx-1"></div>
+
+            <button 
+              onClick={() => setIsImportModalOpen(true)}
+              className="p-2 text-gray-500 hover:text-[#007AFF] hover:bg-[#007AFF]/10 rounded-full transition-colors"
+              title="导入"
+            >
+              <UploadIcon className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setIsExportModalOpen(true)}
+              className="p-2 text-gray-500 hover:text-[#007AFF] hover:bg-[#007AFF]/10 rounded-full transition-colors"
+              title="导出设置"
+            >
+              <Download className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 flex overflow-hidden">
+            {/* Inner Main Content */}
+            <div className="flex-1 overflow-auto p-6 scroll-smooth">
+              <div className="max-w-[1920px] mx-auto space-y-6">
+
+                 {/* Stats Row */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                    {/* 1. Gross Total */}
+                    <AppleStatCard 
+                        title="合计总额" 
+                        value={formatCurrency(grossTotalPayout)} 
+                        icon={<Wallet className="text-white" size={20} />}
+                        color="from-[#8E8E93] to-[#48484A]"
+                        trend={selectedMonth !== 'all' ? `2025年${selectedMonth}月` : `${selectedYear}年度`}
+                        tooltip="包含走账绩效在内的所有收入"
+                    />
+
+                    {/* 2. Net Total */}
+                    <AppleStatCard 
+                        title="实发合计总额" 
+                        value={formatCurrency(totalPayout)} 
+                        icon={<PieChartIcon className="text-white" size={20} />}
+                        color="from-[#007AFF] to-[#0055B3]"
+                        trend="扣除走账绩效"
+                    />
+                    
+                    {/* 3. Headcount */}
+                    <AppleStatCard 
+                        title="发放人数" 
+                        value={headcount.toString()} 
+                        suffix="人"
+                        icon={<Users className="text-white" size={20} />}
+                        color="from-[#FF9500] to-[#E68600]"
+                        trend={activeDepartment === 'all' ? '全院' : activeDepartment}
+                    />
+
+                    {/* 4. Custom Column Stats */}
+                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-[#E5E5EA] flex flex-col justify-between h-32 relative overflow-hidden group">
+                        <div className="flex justify-between items-start z-10">
+                            <div className="relative z-20">
+                                {/* Dropdown triggered by title */}
+                                <div className="relative inline-block">
+                                    <select 
+                                        className="appearance-none bg-transparent pr-4 py-0 text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer focus:outline-none hover:text-[#007AFF] transition-colors"
+                                        value={customStatKey}
+                                        onChange={(e) => setCustomStatKey(e.target.value as keyof SalaryRecord)}
+                                    >
+                                        {STAT_COLUMNS.map(col => (
+                                            <option key={col.key} value={col.key}>{col.label}总额</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-0 top-0 w-3 h-3 text-gray-400 pointer-events-none mt-0.5" />
+                                </div>
+
+                                <div className="mt-1 flex items-baseline gap-1">
+                                    <h3 className="text-2xl font-bold text-[#1D1D1F] tracking-tight">{formatCurrency(customStatValue)}</h3>
+                                </div>
+                            </div>
+                            <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br from-[#AF52DE] to-[#5856D6] flex items-center justify-center shadow-lg shadow-gray-200`}>
+                                <Calculator className="text-white" size={20} />
+                            </div>
+                        </div>
+                        <div className="z-10 mt-auto">
+                            <span className="text-[10px] font-medium text-gray-400 bg-[#F5F5F7] px-2 py-1 rounded-md">
+                                自定义统计
+                            </span>
+                        </div>
+                    </div>
+                 </div>
+
+                 {/* Trend Chart (Only show in Monthly Mode or if user wants context) - keeping it for now */}
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#E5E5EA]">
+                     <div className="flex justify-between items-center mb-6">
+                         <h3 className="font-semibold text-gray-800">
+                             {selectedYear}年度实发趋势 
+                             <span className="text-xs font-normal text-gray-400 ml-2">({activeDepartment === 'all' ? '全院' : activeDepartment})</span>
+                         </h3>
+                     </div>
+                     <div className="h-48">
+                         <ResponsiveContainer width="100%" height="100%">
+                             <BarChart data={trendData}>
+                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F2F2F7" />
+                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#8E8E93', fontSize: 11}} dy={10} />
+                                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#8E8E93', fontSize: 11}} tickFormatter={(value) => `${value/1000}k`} />
+                                 <RechartsTooltip 
+                                     cursor={{fill: '#F2F2F7', radius: 4}}
+                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                     formatter={(value: any) => [formatCurrency(value), '实发']}
+                                 />
+                                 <Bar dataKey="total" fill="#007AFF" radius={[6, 6, 6, 6]} barSize={24} />
+                             </BarChart>
+                         </ResponsiveContainer>
+                     </div>
+                 </div>
+                 
+                 {/* Detailed Table Section */}
+                 <div className="bg-white rounded-3xl shadow-sm border border-[#E5E5EA] overflow-hidden flex flex-col">
+                    <div className="px-6 py-4 border-b border-[#E5E5EA] flex justify-between items-center bg-white/50 backdrop-blur-sm sticky top-0 z-10">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                            <span className="w-1.5 h-4 bg-[#007AFF] rounded-full"></span>
+                            {viewMode === 'monthly' ? '工资明细' : '人员工资汇总'}
+                        </h3>
+                        <div className="text-xs text-gray-500 font-medium bg-[#F2F2F7] px-2 py-1 rounded-lg">
+                            共 {displayRecords.length} {viewMode === 'monthly' ? '条记录' : '人'}
+                        </div>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left whitespace-nowrap">
+                            <thead className="bg-[#F9F9FB] text-gray-500 font-medium">
+                                <tr>
+                                    <th className="px-4 py-3 first:pl-6 sticky left-0 bg-[#F9F9FB] z-10 border-r border-[#E5E5EA]">
+                                        {viewMode === 'monthly' ? '月份' : '统计'}
+                                    </th>
+                                    <th className="px-4 py-3 sticky left-24 bg-[#F9F9FB] z-10 border-r border-[#E5E5EA]">姓名</th>
+                                    <th className="px-4 py-3">部门</th>
+                                    <th className="px-4 py-3 text-right">岗位工资</th>
+                                    <th className="px-4 py-3 text-right">基本工资</th>
+                                    <th className="px-4 py-3 text-right">保留津贴</th>
+                                    <th className="px-4 py-3 text-right">绩效工资</th>
+                                    <th className="px-4 py-3 text-right">内审费</th>
+                                    <th className="px-4 py-3 text-right">证书补贴</th>
+                                    <th className="px-4 py-3 text-right">未休年假</th>
+                                    <th className="px-4 py-3 text-right">宣传绩效</th>
+                                    <th className="px-4 py-3 text-right">分院内审</th>
+                                    <th className="px-4 py-3 text-right">科研绩效</th>
+                                    <th className="px-4 py-3 text-right text-gray-400">走账绩效</th>
+                                    <th className="px-4 py-3 text-right">其他</th>
+                                    <th className="px-4 py-3 text-right font-semibold bg-gray-50">合计</th>
+                                    <th className="px-4 py-3 text-right font-bold text-[#007AFF] bg-blue-50/50">实发合计</th>
+                                    {viewMode === 'monthly' && (
+                                        <th className="px-4 py-3 text-center sticky right-0 bg-[#F9F9FB] z-10 border-l border-[#E5E5EA]">操作</th>
+                                    )}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E5E5EA]">
+                                {displayRecords.map((record) => (
+                                    <tr key={record.id} className="hover:bg-[#F5F5F7] transition-colors group">
+                                        <td className="px-4 py-3 first:pl-6 text-gray-500 sticky left-0 bg-white group-hover:bg-[#F5F5F7] border-r border-[#E5E5EA] transition-colors font-mono">
+                                            {viewMode === 'monthly' ? record.month : <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">共 {(record as any).count} 个月</span>}
+                                        </td>
+                                        <td className="px-4 py-3 font-medium text-[#1D1D1F] sticky left-24 bg-white group-hover:bg-[#F5F5F7] border-r border-[#E5E5EA] transition-colors">
+                                            {renderCell(record, 'employeeName', false)}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600">
+                                             {renderCell(record, 'department', false)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'positionSalary')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'baseSalary')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'retentionAllowance')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'performanceSalary')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'internalAuditFee')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'certificateSubsidy')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'annualLeavePay')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'publicityPerformance')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'branchAuditFee')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'researchPerformance')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric text-gray-400 w-24">
+                                            {renderCell(record, 'otherPerformanceAccounting')}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric w-24">
+                                            {renderCell(record, 'other')}
+                                        </td>
+                                        
+                                        <td className="px-4 py-3 text-right font-numeric font-semibold bg-gray-50 group-hover:bg-gray-100">
+                                            {editingId === record.id ? '-' : formatCurrency(record.total)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-numeric font-bold text-[#007AFF] bg-blue-50/50 group-hover:bg-blue-100/50">
+                                            {editingId === record.id ? '-' : formatCurrency(record.netTotal)}
+                                        </td>
+                                        
+                                        {viewMode === 'monthly' && (
+                                            <td className="px-2 py-2 sticky right-0 bg-white group-hover:bg-[#F5F5F7] border-l border-[#E5E5EA] transition-colors z-10 text-center">
+                                                {editingId === record.id ? (
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button 
+                                                            onClick={handleSaveEdit}
+                                                            className="p-1.5 bg-[#007AFF] text-white rounded-md hover:bg-[#0055B3] transition-colors shadow-sm"
+                                                            title="保存"
+                                                        >
+                                                            <Save size={14} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={handleCancelEdit}
+                                                            className="p-1.5 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+                                                            title="取消"
+                                                        >
+                                                            <XIcon size={14} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button 
+                                                            onClick={() => handleEditClick(record)}
+                                                            className="p-1.5 text-gray-400 hover:text-[#007AFF] hover:bg-blue-50 rounded-md transition-colors"
+                                                            title="编辑"
+                                                        >
+                                                            <Pencil size={14} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(record.id)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                            title="删除"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                                {displayRecords.length === 0 && (
+                                    <tr>
+                                        <td colSpan={18} className="px-6 py-12 text-center text-gray-400 italic">
+                                            未找到相关数据
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                 </div>
+
+              </div>
+            </div>
+
+            {/* Right Sidebar - Employee Query Module - Collapsible Strip Mode */}
+            <aside className={`bg-white/80 backdrop-blur-xl flex flex-col z-10 flex-shrink-0 transition-all duration-300 border-l border-[#E5E5EA] ${isRightSidebarOpen ? 'w-72' : 'w-12'}`}>
+               {isRightSidebarOpen ? (
+                   <div className="w-72 flex flex-col h-full">
+                       <div className="p-4 border-b border-[#E5E5EA] sticky top-0 bg-white/50 backdrop-blur-sm z-10 flex justify-between items-center">
+                           <div>
+                               <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                                   <UserCircle size={16} className="text-[#007AFF]" />
+                                   {selectedYear} 员工名录
+                               </h3>
+                               <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                                   按年实发收入排序
+                               </p>
+                           </div>
+                           <div className="flex items-center gap-2">
+                               <div className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full font-medium">
+                                   {employeeDirectory.length}
+                               </div>
+                               <button 
+                                   onClick={() => setIsRightSidebarOpen(false)}
+                                   className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-md transition-colors"
+                                   title="收起名录"
+                               >
+                                   <ChevronRight size={16} />
+                               </button>
+                           </div>
+                       </div>
+                       
+                       <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                           {employeeDirectory.length === 0 ? (
+                               <div className="text-center py-10 text-gray-400 text-xs">
+                                   无员工数据
+                               </div>
+                           ) : (
+                               employeeDirectory.map(emp => (
+                                   <button
+                                      key={`${emp.name}-${emp.dept}`}
+                                      onClick={() => setSearchTerm(emp.name)}
+                                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all duration-200 group border ${
+                                          searchTerm === emp.name 
+                                            ? 'bg-[#007AFF] text-white shadow-md border-[#007AFF] ring-1 ring-[#007AFF]/50' 
+                                            : 'bg-white border-transparent hover:border-[#E5E5EA] hover:bg-gray-50 text-gray-700'
+                                      }`}
+                                   >
+                                      {/* Avatar Circle */}
+                                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm flex-shrink-0 transition-colors ${
+                                          searchTerm === emp.name 
+                                            ? 'bg-white/20 text-white' 
+                                            : 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-500 group-hover:from-white group-hover:to-white group-hover:text-[#007AFF]'
+                                      }`}>
+                                          {emp.name.slice(0, 1)}
+                                      </div>
+                                      
+                                      <div className="flex-1 min-w-0">
+                                          <div className="font-semibold text-sm truncate flex items-center gap-2">
+                                            {emp.name}
+                                          </div>
+                                          <div className={`text-[11px] truncate mt-0.5 ${searchTerm === emp.name ? 'text-blue-100' : 'text-gray-400'}`}>
+                                              {emp.dept}
+                                          </div>
+                                      </div>
+                                      
+                                      <div className="text-right">
+                                          <div className={`text-xs font-bold font-numeric ${searchTerm === emp.name ? 'text-white' : 'text-[#1D1D1F]'}`}>
+                                              {formatCurrency(emp.total)}
+                                          </div>
+                                          <div className={`text-[10px] scale-90 origin-right ${searchTerm === emp.name ? 'text-blue-200' : 'text-gray-400'}`}>
+                                              年实发
+                                          </div>
+                                      </div>
+                                   </button>
+                               ))
+                           )}
+                       </div>
+                   </div>
+               ) : (
+                   <div 
+                        className="w-12 flex flex-col items-center h-full py-4 bg-[#F9F9FB] cursor-pointer hover:bg-[#F2F2F7] transition-colors" 
+                        onClick={() => setIsRightSidebarOpen(true)}
+                        title="展开员工名录"
+                   >
+                       <div className="p-2 rounded-lg bg-white shadow-sm border border-gray-200 mb-4 text-[#007AFF]">
+                           <UserCircle size={20} />
+                       </div>
+                       <div className="[writing-mode:vertical-rl] text-xs font-medium text-gray-500 tracking-widest whitespace-nowrap">
+                           员工名录
+                       </div>
+                   </div>
+               )}
+            </aside>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// --- Sub Components ---
+
+interface SidebarItemProps {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, active, onClick }) => (
+    <button 
+        onClick={onClick}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group
+            ${active 
+                ? 'bg-white text-[#007AFF] shadow-sm' 
+                : 'text-gray-500 hover:bg-black/5 hover:text-gray-900'
+            }`}
+    >
+        <span className={`transition-colors ${active ? 'text-[#007AFF]' : 'text-gray-400 group-hover:text-gray-600'}`}>
+            {icon}
+        </span>
+        {label}
+        {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#007AFF]"></div>}
+    </button>
+);
+
+const AppleStatCard = ({ title, value, suffix, icon, color, trend, tooltip }: any) => (
+    <div className="bg-white p-5 rounded-3xl shadow-sm border border-[#E5E5EA] flex flex-col justify-between h-32 relative overflow-hidden group">
+        <div className="flex justify-between items-start z-10">
+            <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+                    {title}
+                </p>
+                <div className="mt-1 flex items-baseline gap-1">
+                    <h3 className="text-2xl font-bold text-[#1D1D1F] tracking-tight">{value}</h3>
+                    {suffix && <span className="text-sm text-gray-500 font-medium">{suffix}</span>}
+                </div>
+            </div>
+            <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center shadow-lg shadow-gray-200`}>
+                {icon}
+            </div>
+        </div>
+        <div className="z-10 mt-auto">
+             <span className="text-[10px] font-medium text-gray-400 bg-[#F5F5F7] px-2 py-1 rounded-md">
+                {trend}
+             </span>
+        </div>
+    </div>
+);
+
+export default App;
