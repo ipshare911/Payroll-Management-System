@@ -17,13 +17,15 @@ import {
   Trash2,
   Rows,
   Sigma,
-  UserCircle
+  UserCircle,
+  LogOut // Added Logout icon
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { SalaryRecord } from './types';
 import { db } from './services/db';
 import { ImportModal } from './components/ImportModal';
 import { ExportModal } from './components/ExportModal';
+import { Login } from './components/Login'; // Import Login Component
 
 // --- Apple Style Constants ---
 const DEPARTMENTS = ['基础地质所', '规划所', '储量所', '绿色矿山所', '矿业经济所', '遥感所', '办公室'];
@@ -48,6 +50,12 @@ const formatCurrency = (val: number) => {
 };
 
 function App() {
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    const auth = sessionStorage.getItem('mineral_auth');
+    return auth === 'true';
+  });
+
   // Navigation State
   const [activeDepartment, setActiveDepartment] = useState<string>('all'); // 'all' = 分院概况
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -74,11 +82,32 @@ function App() {
   const [editForm, setEditForm] = useState<SalaryRecord | null>(null);
 
   useEffect(() => {
-    refreshData();
-  }, []);
+    if (isAuthenticated) {
+      refreshData();
+    }
+  }, [isAuthenticated]);
 
   const refreshData = () => {
     setRecords(db.getAllRecords());
+  };
+
+  // Auth Handlers
+  const handleLogin = (success: boolean) => {
+    if (success) {
+      sessionStorage.setItem('mineral_auth', 'true');
+      setIsAuthenticated(true);
+    }
+  };
+
+  const handleLogout = () => {
+    // Determine if we should show confirm based on environment, or just logout.
+    // Simplifying to direct logout to fix "no response" issues if window.confirm is blocked.
+    if (window.confirm('确定要退出登录吗？')) {
+        sessionStorage.removeItem('mineral_auth');
+        setIsAuthenticated(false);
+        // Force reload to ensure clean state and clear in-memory data
+        window.location.reload();
+    }
   };
 
   // --- Computed Data ---
@@ -119,8 +148,6 @@ function App() {
 
   // Employee Directory Data (Right Sidebar)
   const employeeDirectory = useMemo(() => {
-      // Base records on current department selection (Year independent to show full roster, or dependent? Usually roster is better year dependent if people leave, but let's just use filtered by Year for consistency)
-      // Actually, for a "Directory", showing everyone who has a record in the selected year is best.
       let baseData = records.filter(r => r.month.startsWith(selectedYear));
       
       if (activeDepartment !== 'all') {
@@ -308,6 +335,11 @@ function App() {
       return isNumeric ? (record[field] as number) : (record[field] as string);
   };
 
+  // --- Auth Check ---
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="flex h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans overflow-hidden selection:bg-[#007AFF] selection:text-white">
       <ImportModal 
@@ -327,7 +359,6 @@ function App() {
       />
 
       {/* Apple Style Sidebar (Left) */}
-      {/* Fix: Removed negative margin (-ml-4) which caused layout issues. Added overflow-hidden to cleanly hide content. */}
       <aside className={`bg-[#FBFBFD] border-r border-[#E5E5EA] transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-0'} overflow-hidden flex flex-col z-20 flex-shrink-0`}>
         <div className="h-16 flex items-center px-6 pt-4 mb-2 flex-shrink-0">
            <div className="flex items-center gap-2">
@@ -366,6 +397,18 @@ function App() {
                 />
              ))}
         </nav>
+
+        {/* Sidebar Footer - Logout */}
+        <div className="p-3 border-t border-[#E5E5EA]">
+            <button 
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors group cursor-pointer"
+            >
+                <LogOut size={18} />
+                退出登录
+            </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
