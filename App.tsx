@@ -358,13 +358,13 @@ function App() {
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
-             {/* View Mode Toggle - Hide on mobile if simpler view preferred, or keep small */}
-             <div className="hidden md:flex bg-[#F2F2F7] rounded-lg p-1 mr-2">
+             {/* View Mode Toggle - Visible on mobile now for switching between Detail/Summary */}
+             <div className="flex flex-shrink-0 bg-[#F2F2F7] rounded-lg p-1 mr-2">
                  <button onClick={() => setViewMode('monthly')} className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'monthly' ? 'bg-white text-[#007AFF] shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
-                     <Rows size={12} /> 明细
+                     <Rows size={12} /> <span className="whitespace-nowrap">明细</span>
                  </button>
                  <button onClick={() => setViewMode('summary')} className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'summary' ? 'bg-white text-[#007AFF] shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
-                     <Sigma size={12} /> 汇总
+                     <Sigma size={12} /> <span className="whitespace-nowrap">汇总</span>
                  </button>
              </div>
 
@@ -524,7 +524,7 @@ function App() {
                                                      {renderCell(record, 'employeeName', false)}
                                                  </div>
                                                  <div className="text-xs text-gray-400 mt-0.5">
-                                                     {renderCell(record, 'department', false)} · {viewMode === 'monthly' ? record.month : '汇总'}
+                                                     {renderCell(record, 'department', false)} · {viewMode === 'monthly' ? record.month : `汇总 (${(record as any).count}个月)`}
                                                  </div>
                                              </div>
                                          </div>
