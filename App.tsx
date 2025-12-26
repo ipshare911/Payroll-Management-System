@@ -20,8 +20,7 @@ import {
   UserCircle,
   LogOut,
   Menu,
-  ChevronUp,
-  Loader2
+  ChevronUp
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { SalaryRecord } from './types';
@@ -97,7 +96,6 @@ function App() {
 
   // Data State
   const [records, setRecords] = useState<SalaryRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
@@ -114,16 +112,8 @@ function App() {
     }
   }, [isAuthenticated]);
 
-  const refreshData = async () => {
-    setIsLoading(true);
-    try {
-      const data = await db.getAllRecords();
-      setRecords(data);
-    } catch (e) {
-      console.error("Failed to load data", e);
-    } finally {
-      setIsLoading(false);
-    }
+  const refreshData = () => {
+    setRecords(db.getAllRecords());
   };
 
   // Auth Handlers
@@ -247,29 +237,24 @@ function App() {
     setEditingId(null);
     setEditForm(null);
   };
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editForm) return;
     const total = STAT_COLUMNS.reduce((acc, col) => acc + (Number(editForm[col.key]) || 0), 0);
     const netTotal = total - (Number(editForm.otherPerformanceAccounting) || 0);
     const updatedRecord = { ...editForm, total, netTotal };
-    
-    try {
-      await db.updateRecord(updatedRecord);
-      await refreshData();
-      setEditingId(null);
-      setEditForm(null);
-    } catch(e) {
-      alert('保存失败');
-    }
+    db.updateRecord(updatedRecord);
+    refreshData();
+    setEditingId(null);
+    setEditForm(null);
   };
   
   const handleDelete = (id: string) => {
       // Use setTimeout to allow UI to update/detach event handlers on touch devices
-      setTimeout(async () => {
+      setTimeout(() => {
         if(window.confirm('确定要删除这条记录吗？')) {
             try {
-                await db.deleteRecord(id);
-                await refreshData();
+                db.deleteRecord(id);
+                refreshData();
             } catch (e) {
                 console.error("Delete failed", e);
                 alert("删除失败，请重试。");
@@ -319,16 +304,6 @@ function App() {
       <ImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onSuccess={refreshData} />
       <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} data={filteredRecords} context={{ year: selectedYear, department: activeDepartment }} />
 
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="fixed inset-0 z-[100] bg-white/50 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-             <Loader2 className="w-8 h-8 text-[#007AFF] animate-spin" />
-             <span className="text-xs font-medium text-gray-500">正在同步数据...</span>
-          </div>
-        </div>
-      )}
-
       {/* Mobile Sidebar Backdrop */}
       {isMobile && isSidebarOpen && (
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" onClick={() => setIsSidebarOpen(false)} />
@@ -348,7 +323,7 @@ function App() {
               </div>
               <div className="min-w-0">
                 <h1 className="font-semibold text-sm leading-tight whitespace-nowrap">矿产资源分院</h1>
-                <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">工资管理系统 (Neon)</span>
+                <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">工资管理系统</span>
               </div>
            </div>
         </div>
