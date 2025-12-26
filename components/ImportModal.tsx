@@ -10,6 +10,14 @@ interface ImportModalProps {
   onSuccess: () => void;
 }
 
+// Simple UUID generator for non-secure contexts (http)
+const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
 export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -167,7 +175,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
            const netTotal = total - otherPerformanceAccounting;
 
            newRecords.push({
-            id: crypto.randomUUID(),
+            id: generateId(), // Use robust ID generation
             sequence: index + 1,
             employeeName: name,
             department: dept,

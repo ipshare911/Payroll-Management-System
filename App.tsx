@@ -247,12 +247,22 @@ function App() {
     setEditingId(null);
     setEditForm(null);
   };
+  
   const handleDelete = (id: string) => {
-      if(window.confirm('确定要删除这条记录吗？')) {
-          db.deleteRecord(id);
-          refreshData();
-      }
+      // Use setTimeout to allow UI to update/detach event handlers on touch devices
+      setTimeout(() => {
+        if(window.confirm('确定要删除这条记录吗？')) {
+            try {
+                db.deleteRecord(id);
+                refreshData();
+            } catch (e) {
+                console.error("Delete failed", e);
+                alert("删除失败，请重试。");
+            }
+        }
+      }, 50);
   };
+
   const handleInputChange = (field: keyof SalaryRecord, value: string) => {
       if (!editForm) return;
       let parsedValue: string | number = value;
@@ -573,11 +583,11 @@ function App() {
                                                      </>
                                                  ) : (
                                                      <>
-                                                         <button onClick={(e) => { e.stopPropagation(); handleEditClick(record); }} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-50 flex items-center justify-center gap-1">
+                                                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEditClick(record); }} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-50 flex items-center justify-center gap-1 active:bg-gray-100">
                                                              <Pencil size={14} /> 编辑
                                                          </button>
-                                                         <button onClick={(e) => { e.stopPropagation(); handleDelete(record.id); }} className="px-4 bg-white border border-red-200 text-red-600 py-2 rounded-lg font-medium hover:bg-red-50">
-                                                             <Trash2 size={16} />
+                                                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(record.id); }} className="px-4 bg-white border border-red-200 text-red-600 py-2 rounded-lg font-medium hover:bg-red-50 flex items-center justify-center gap-1 active:bg-red-50">
+                                                             <Trash2 size={16} /> 删除
                                                          </button>
                                                      </>
                                                  )}
