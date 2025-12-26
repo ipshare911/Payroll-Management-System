@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { SalaryRecord } from '../types';
-import { Upload, X, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, X, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { db } from '../services/db';
 import * as XLSX from 'xlsx';
 
@@ -45,7 +45,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
     setProcessing(true);
     const reader = new FileReader();
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
@@ -198,7 +198,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
         });
 
         if (newRecords.length > 0) {
-          db.addRecords(newRecords);
+          // Await the API call
+          await db.addRecords(newRecords);
           setSuccessMsg(`成功导入 ${newRecords.length} 条数据。`);
           setTimeout(() => {
             onSuccess();
@@ -266,8 +267,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
           </div>
 
           {processing && (
-            <div className="text-center text-primary-600 text-sm font-medium animate-pulse">
-              正在处理数据，请稍候...
+            <div className="text-center text-primary-600 text-sm font-medium animate-pulse flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              正在同步到数据库，请稍候...
             </div>
           )}
 
